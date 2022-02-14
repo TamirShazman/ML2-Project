@@ -9,6 +9,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 import time
 from IPython import display
 
+
 import argparse
 import torchvision
 
@@ -162,7 +163,6 @@ def train_geco(model, opt, scheduler, train_loader, valid_loader,
 
         for X_batch in train_loader:
             X_batch = X_batch.reshape(train_loader.batch_size, -1).to(device)
-
             reconstruction_mu, reconstruction_logsigma, latent_mu, latent_logsigma = model(X_batch)
             constraint = torch.mean(constraint_f(X_batch, reconstruction_mu, tol=tol))
             KL_div = torch.mean(KL_divergence(latent_mu, latent_logsigma))
