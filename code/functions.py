@@ -7,7 +7,7 @@ def sample_vae(hid_size, model):
     z = Normal(torch.zeros(hid_size), torch.zeros(hid_size) + 1).sample()
     mu = model.reconstruction_mu(model.decode(z))
     return mu
-
+#
 
 def marginal_KL(valid_loader, model):
     KL = 0

@@ -33,6 +33,20 @@ def RE_mtr(x, mu, tol):
 def loss_beta_vae(x, mu_gen, logsigma_gen, mu_latent, logsigma_latent, beta=1):
     return torch.mean(beta * KL_divergence(mu_latent, logsigma_latent) - log_likelihood(x, mu_gen, logsigma_gen))
 
+def calculate_lambda_modification(KL_diff, recon_diff):
+    '''
+    change lambda based on the last improvement made.
+    If both KL and reconstruction improved than keep lambda
+    If KL improved at the expense of reconstruction, then shift more weight to reconstruction
+    '''
+    if KL_diff >= 0 and recon_diff >= 0:
+        power = 0
+    elif KL_diff > 0 and recon_diff < 0:
+        power = -torch.div(recon_diff, KL_diff)
+    elif KL_diff < 0 and recon_diff > 0:
+        power = torch.div(KL_diff, recon_diff)
+
+    return torch.clamp(torch.exp(power), 0.9, 1.05)
 
 def draw_hist(train_hist, valid_hist, lambd_hist=[0]):
     fig, ax = plt.subplots(ncols=4, nrows=1, figsize=(16, 4))
@@ -144,6 +158,9 @@ def train_geco(model, opt, scheduler, train_loader, valid_loader,
                constraint_f=RE, num_epochs=20,
                lbd_step=100, alpha=0.99, visualize=True,
                device='cpu', tol=1, pretrain=1):
+    normal = False
+    print("Started training")
+    print(normal)
     model.to(device)
     train_hist = {'loss': [], 'reconstr': [], 'KL': []}
     valid_hist = {'loss': [], 'reconstr': [], 'KL': []}
@@ -161,6 +178,9 @@ def train_geco(model, opt, scheduler, train_loader, valid_loader,
         train_hist['reconstr'].append(0)
         train_hist['KL'].append(0)
 
+        previous_constraint = 0
+        previous_kl_div = 0
+
         for X_batch in train_loader:
             X_batch = X_batch.reshape(train_loader.batch_size, -1).to(device)
             reconstruction_mu, reconstruction_logsigma, latent_mu, latent_logsigma = model(X_batch)
@@ -172,19 +192,36 @@ def train_geco(model, opt, scheduler, train_loader, valid_loader,
             opt.step()
             opt.zero_grad()
 
-            with torch.no_grad():
-                if epoch == 0 and iter_num == 0:
-                    constrain_ma = constraint
-                else:
-                    constrain_ma = alpha * constrain_ma.detach_() + (1 - alpha) * constraint
-                if iter_num % lbd_step == 0 and epoch > pretrain:
-                    #                     print(torch.exp(constrain_ma), lambd)
-                    lambd *= torch.clamp(torch.exp(constrain_ma), 0.9, 1.1)
+            if normal:
+                with torch.no_grad():
+                    if epoch == 0 and iter_num == 0:
+                        constrain_ma = constraint
+                    else:
+                        constrain_ma = alpha * constrain_ma.detach_() + (1 - alpha) * constraint
+                    if iter_num % lbd_step == 0 and epoch > pretrain:
+                        #                     print(torch.exp(constrain_ma), lambd)
+                        lambd *= torch.clamp(torch.exp(constrain_ma), 0.9, 1.1)
+            else:
+                with torch.no_grad():
+                    if epoch == 0 and iter_num == 0:
+                        pass
+                    elif iter_num == 1:
+                        constrain_diff_ma = constraint - previous_constraint
+                        kl_div_diff_ma = KL_div - previous_kl_div
+                    else:
+                        constrain_diff = constraint - previous_constraint
+                        kl_div_diff = KL_div - previous_kl_div
+                        constrain_diff_ma = alpha * constrain_diff_ma.detach_() + (1 - alpha) * constrain_diff
+                        kl_div_diff_ma = alpha * kl_div_diff_ma.detach_() + (1 - alpha) * kl_div_diff
+                        if iter_num % lbd_step == 0 and epoch > pretrain:
+                            lambd *= calculate_lambda_modification(kl_div_diff_ma, constrain_diff_ma)
+                    previous_constraint = constraint
+                    previous_kl_div = KL_div
 
-            train_hist['loss'][-1] += loss.data.cpu().numpy()[0] / len(train_loader)
-            train_hist['reconstr'][-1] += constraint.data.cpu().numpy() / len(train_loader)
-            train_hist['KL'][-1] += KL_div.data.cpu().numpy() / len(train_loader)
-            iter_num += 1
+        train_hist['loss'][-1] += loss.data.cpu().numpy()[0] / len(train_loader)
+        train_hist['reconstr'][-1] += constraint.data.cpu().numpy() / len(train_loader)
+        train_hist['KL'][-1] += KL_div.data.cpu().numpy() / len(train_loader)
+        iter_num += 1
         lambd_hist.append(lambd.data.cpu().numpy()[0])
 
         model.train(False)
