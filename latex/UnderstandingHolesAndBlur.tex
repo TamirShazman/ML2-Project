@@ -1,0 +1,104 @@
+\chapter*{Understanding Holes and Blurred Reconstructions}
+The authors show that the optimal decoder, g(z), is a convex linear combination of the training data weighted by the encoders, $q(z|x)$.
+As a result, when $q(z|x)\approx 0$ there is a "hole" in the decoder and that blurring occurs when there is overlap between the supports of multiple x's $q(z|x)$.\\
+In order to do so, they use the stationary points of ELBO.
+
+\section*{Stationary Points Using ELBO}
+\begin{gather*}
+{ELBO} =  \E_{\rho(x)}\left[[\E_{q(z|x)}[\ln{p(x|z)}] - KL[q(z|x) \| \pi(z)]\right]
+\end{gather*}
+
+We will further develop the expression using the assumptions that the authors make in their derivations.
+
+\raggedright
+They make the following assumptions:\par
+
+\centering
+$\rho(x) = \frac{1}{n} \sum_{i=1}^{n}\delta^*(x-x_i)$
+
+$\pi(z) = \mathcal{N}(\textbf{0}, \mathcal{I})$
+
+$p(x|z) = \mathcal{N}(g(z), \sigma^2)$
+\par
+
+\raggedright
+*$\delta$ represents the Dirac measure.
+\par
+
+\begin{gather*}
+{ELBO} =  \E_{\rho(x)}\left[[\E_{q(z|x)}[\ln{p(x|z)}] - KL[q(z|x) \| \pi(z)]\right]
+= \sum_{x}\rho(x)\left(\sum_{z} q(z|x) \ln{p(x|z)} - \sum_{z} ln \frac{q(z|x)}{\pi(z)}\right)
+\end{gather*}
+
+By the definition of Dirac measure, $\rho(x) = \frac{1}{n}, \forall x$
+Therefore, we receive the following:
+\begin{gather*}
+\frac{1}{n}\sum_{x}\sum_{z} q(z|x) \ln{p(x|z)} - \sum_{z} ln \frac{q(z|x)}{\pi(z)}
+\end{gather*}
+\par
+
+We will now find the partial derivatives of the ELBO function by decoder, $g(z)$, and encoder, $q(z|x)$.
+\par
+
+\subsection*{Decoder}
+\begin{equation}
+\frac{\partial}{\partial g(z)}\frac{1}{n}\sum_{x}\sum_{z} q(z|x) \ln{p(x|z)} - ln \frac{q(z|x)}{\pi(z)}
+\end{equation}
+We will plug in the distribution for $p(x|z) = \mathcal{N}(g(z), \sigma^2)$
+\begin{equation}
+\frac{\partial}{\partial g(z)}\frac{1}{n}\sum_{x}\sum_{z} q(z|x) \ln{\frac{1}{\sqrt[]{2\pi\sigma^2}}}e^{-\frac{\norm{x-g(z)}^2}{2\sigma^2}} - \ln\frac{q(z|x)}{\pi(z)}
+\end{equation}
+\begin{equation}
+\frac{\partial}{\partial g(z)}\frac{1}{n}\sum_{x}\sum_{z} q(z|x) \ln{\frac{1}{\sqrt[]{2\pi\sigma^2}}}-\frac{\norm{x-g(z)}^2}{2\sigma^2} - \ln\frac{q(z|x)}{\pi(z)}
+\end{equation}
+\begin{equation}
+\frac{1}{n}\sum_{x}-\frac{q(z|x)(x-g(z)}{\sigma^2}
+\end{equation}
+Therefore, setting the partial derivative to zero to find the stationary point, we find the following relationship between decoder and encoders:
+\begin{gather*}
+g(z) = \frac{\sum_{x}{q(z|x) x}}{\sum_{x}{q(z|x)}}
+\end{gather*}
+Thus the decoder is a convex linear combination of the training data weighted by the encoders, $q(z|x)$.
+\par
+
+\subsection*{Encoder}
+\setcounter{equation}{0}
+\begin{equation}
+\frac{\partial}{\partial q(z|x)}\frac{1}{n}\sum_{x}\sum_{z} q(z|x) \ln{p(x|z)} - ln \frac{q(z|x)}{\pi(z)}
+\end{equation}
+\begin{equation}
+\frac{1}{n}\left[{\ln{\frac{1}{\sqrt[]{2\pi\sigma^2}}}-\frac{\norm{x-g(z)}^2}{2\sigma^2} + \ln{\frac{q(z|x)}{\pi(z)} + 1}}\right]
+\end{equation}
+The paper only shows a proportional relationship, ignoring the constants. The simplified equation is:
+\begin{equation}
+-\frac{\norm{x-g(z)}^2}{2\sigma^2} + \ln{\frac{q(z|x)}{\pi(z)}}
+\end{equation}
+Therefore, setting the partial derivative to zero to find the stationary point, we find the following relationship between encoder and decoder:
+\begin{gather*}
+q(z|x) \propto \pi(z)e^\frac{-\norm{x-g(z)}^2}{2\sigma^2}
+\end{gather*}
+
+\section*{Holes}
+Having seen that $g(z) = \frac{\sum_{x}{q(z|x) x}}{\sum_{x}{q(z|x)}}$, it easy to see that if $\forall x, q(z|x) \approx 0$ then also $g(z) \approx 0$ resulting in holes.
+
+\section*{Blurred Reconstructions}
+The authors claim that blurred reconstruction is not primarily caused by using Gaussian models in the likelihood. Rather, it is from overlap in the support of multiple $q(z|x_{i})$.
+\par
+They show there results by replacing $q(z|x_{i})$ with $\frac{\pi(z)\mathcal{I}(z\in\Omega_{i})}{\pi_{i}}$ s.t. $\pi_{i} = \E_{\pi(z)}[\mathcal{I}(z\in\Omega_{i}]$
+Therefore,
+\setcounter{equation}{0} 
+\begin{equation}
+g(z) = \sum_{i}x_{i}\frac{q(z|x_{i}}{\sum_{j}q(z|x_{j})}
+\end{equation}
+Because $\pi(z)$ appears in the numerator and denominator it is canceled out and we get
+\begin{equation}
+\sum_{i}x_{i}\frac{\frac{\mathcal{I}(z\in\Omega_{i})}{\pi_{i}}}{\sum_{j}\frac{\mathcal{I}(z\in\Omega_{j})}{\pi_{j}}}
+\end{equation}
+As we can see, when z is uniquely found within the support of a specific $x_i$ then we get:
+\begin{gather*}
+\sum_{i}x_{i}\frac{\frac{\mathcal{I}(z\in\Omega_{i})}{\pi_{i}}}{\sum_{j}\frac{\mathcal{I}(z\in\Omega_{j})}{\pi_{j}}} = x_{i}\frac{\frac{1}{\pi_{i}}}{\frac{1}{\pi_{i}}} = x_{i}
+\end{gather*}
+However, if z is found in the support of multiple x then g(z) is a weighted average of these x's, resulting in blurred reconstructions.
+
+\section*{Conclusion}
+In conclusion, the authors use the stationary point $g(z) = \frac{\sum_{x}{q(z|x) x}}{\sum_{x}{q(z|x)}}$ in order to show that "holes" occur when $q(z|x) \approx 0$. They also show that the decoder $g(z)$ is a linear combination of $q(z|x)$. Therefore, when a z is part of the "domain"/support of multiple $q(z|x)$, it is reconstructed as a blurry, weighted average of those x.

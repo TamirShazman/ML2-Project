@@ -1,0 +1,32 @@
+\chapter*{Quick Overview}
+The papers main goals are:
+\begin{enumerate}
+\item Offer a deeper understanding of common problems with VAEs
+\item Discuss the relationship between the prior and marginal posterior of the latent space
+\item Relate VAEs to other fields-Spectral Clustering and Statistical Mechanics
+\item GECO - a principled approach to managing the importance given to reconstruction error versus the KL term during training
+\end{enumerate}
+
+\section*{1. Common problems with VAEs}
+There are two primary problems that affect the generation of random samples with VAEs. The first is "holes"-provided with a sample point in the latent space the decoder fails to construct a meaningful data point in the observed space. The most intuitive example of this is a VAE trained on pictures. A hole occurs when a sampled point is decoded as an almost totally black picture. There is a "hole" in the latent space resulting in an empty picture being reconstructed.
+The second common problem is blurred reconstruction. Unlike a "hole," the VAE succeeds in constructing a meaningful data point in the observed space. Returning to the earlier example, the picture is not black. It is, however, blurry. The literature has often attributed this phenomena to the use of Gaussian posteriers. However, the authors claim that blurred reconstruction occurs as a result of the latent sample being found in the cross section of the "domains"/support of several decoders. \\
+\section*{2. The relationship between the prior and marginal posterior of the latent space}
+The authors continue building a deeper understanding of VAEs behavior. They show that after making certain assumptions about the decoders, it can be shown that the marginal posterior equals the prior.
+\section*{3. Relating VAEs to other fields}
+Here the authors waste our and everyone's time by pretending to prove certain intuitions that they seem to have felt would make their paper more interesting. Like their "proofs" in this part of the paper, they were wrong.
+\section*{4. GECO}
+Having expanded the theory on current VAEs, the authors offer the GECO algorithm. GECO offers a more general optimization problem and a method for controlling the trade-off between the reconstruction error and the KL term during training.\\
+Instead of ELBO:
+\begin{gather*}
+{ELBO} =  \E_{\rho(x)}\left[[\E_{q(z|x)}[\ln{p(x|z)}] - KL[q(z|x) \| \pi(z)]\right]
+\end{gather*}
+GECO uses:
+\begin{gather*}
+L_{\lambda} = \E_{\rho(x)}\left[KL[q(z|x) \| \pi(z)] + \lambda^{T}\E_{q(z|x)}[\mathcal{C}(x, g(z))\right]
+\end{gather*}
+Although both contain a term controlling the reconstruction error and the KL divergence, GECO changes two things. 1. It allows for a variety of reconstruction error constraints, generalized as $\mathcal{C}(x, g(z))$. 2. Similar to $\beta$-VAEs it formulates the reconstruction error as a Lagrangian constraint with a Lagrangian multiplier.\\
+The paper "beta-VAE: Learning Basic Visual Concepts with a Constrained Variational Framework" shows improved results on ELBO by formulating the reconstruction error as a Lagrangian constraint with a Lagrangian multiplier. This allows for the trade-off between the reconstruction error and KL divergence to be controlled by $\beta$, the Lagrangian multiplier. This gives the ML practitioner more customizability in the $\beta$-VAE model relative to the simple VAE model. However, it adds a hyperparameter that must be found.\\
+The authors offer the GECO algorithm using the above optimization problem and, critically, a method for adjusting the Lagrangian multiplier during training. They claim that this prevents "over optimizing" the reconstruction error at the expense of the KL term, resulting in a non-optimal latent distribution space.
+
+\section*{}
+We summarize these ideas in more detail below with proofs.
