@@ -8,9 +8,9 @@ dim_latent = 100
 
 
 class VAE(nn.Module):
-    def __init__(self, dims=dims, dim_latent=dim_latent):
+    def __init__(self, dims=dims, dim_latent=dim_latent, parametrized=False):
         super().__init__()
-
+        self.parametrized = parametrized
         self.encode = nn.Sequential()
         curr_l = dims[0]
         for i, next_layer in enumerate(dims[1:]):
@@ -20,23 +20,24 @@ class VAE(nn.Module):
 
         self.decode = nn.Sequential()
         curr_l = dim_latent
-        for i, next_layer in enumerate(dims[:0:-1]):
+        for i, next_layer in enumerate(dims[:0:-1] if parametrized else dims[::-1]):
             self.decode.add_module('Linear_{}'.format(i + 1), nn.Linear(curr_l, next_layer))
             self.decode.add_module('ReLU_{}'.format(i + 1), nn.ReLU())
             curr_l = next_layer
 
         self.latent_mu = nn.Linear(dims[-1], dim_latent)
-        self.latent_logsigma = nn.Linear(dims[-1], dim_latent)
+        self.latent_log_sigma = nn.Linear(dims[-1], dim_latent)
 
-        self.reconstruction_mu = nn.Sequential(
-            nn.Linear(dims[1], dims[0]),
-            nn.Sigmoid()
-        )
+        if parametrized:
+            self.reconstruction_mu = nn.Sequential(
+                nn.Linear(dims[1], dims[0]),
+                nn.Sigmoid()
+            )
 
-        self.reconstruction_logsigma = nn.Sequential(
-            nn.Linear(dims[1], dims[0]),
-            nn.Sigmoid()
-        )
+            self.reconstruction_logsigma = nn.Sequential(
+                nn.Linear(dims[1], dims[0]),
+                nn.Sigmoid()
+            )
 
     def gaussian_sampler(self, mu, logsigma):
         if self.training:
@@ -47,73 +48,17 @@ class VAE(nn.Module):
             return mu
 
     def forward(self, x):
-
         x_enc = self.encode(x)
         latent_mu = self.latent_mu(x_enc)
-        latent_logsigma = self.latent_logsigma(x_enc)
-
+        latent_logsigma = self.latent_log_sigma(x_enc)
         z = self.gaussian_sampler(latent_mu, latent_logsigma)
-
-        x_hat = self.decode(z)
-
-        reconstruction_mu = self.reconstruction_mu(x_hat)
-        reconstruction_logsigma = self.reconstruction_logsigma(x_hat)
-
-        return reconstruction_mu, reconstruction_logsigma, latent_mu, latent_logsigma
-
-
-class IVAE(nn.Module):
-    def __init__(self, dims=dims, dim_latent=dim_latent):
-        super().__init__()
-        self.num_samples = 5
-        self.encode = nn.Sequential()
-        curr_l = dims[0]
-        for i, next_layer in enumerate(dims[1:]):
-            self.encode.add_module('Linear_{}'.format(i + 1), nn.Linear(curr_l, next_layer))
-            self.encode.add_module('ReLU_{}'.format(i + 1), nn.ReLU())
-            curr_l = next_layer
-
-        self.decode = nn.Sequential()
-        curr_l = dim_latent
-        for i, next_layer in enumerate(dims[:0:-1]):
-            self.decode.add_module('Linear_{}'.format(i + 1), nn.Linear(curr_l, next_layer))
-            self.decode.add_module('ReLU_{}'.format(i + 1), nn.ReLU())
-            curr_l = next_layer
-
-        self.latent_mu = nn.Linear(dims[-1], dim_latent)
-        self.latent_logsigma = nn.Linear(dims[-1], dim_latent)
-
-        self.reconstruction_mu = nn.Sequential(
-            nn.Linear(dims[1], dims[0]),
-            nn.Sigmoid()
-        )
-
-        self.reconstruction_logsigma = nn.Sequential(
-            nn.Linear(dims[1], dims[0]),
-            nn.Sigmoid()
-        )
-
-    def gaussian_sampler(self, mu, logsigma):
-        if self.training:
-            std = logsigma.exp()
-            eps = std.data.new(std.size()).normal_()
-            return eps.mul(std).add_(mu)
+        x_h = self.decode(z)
+        if self.parametrized:
+            reconstruction_mu = self.reconstruction_mu(x_h)
+            reconstruction_logsigma = self.reconstruction_logsigma(x_h)
+            return reconstruction_mu, reconstruction_logsigma, latent_mu, latent_logsigma, z
         else:
-            return mu
-
-    def forward(self, x):
-
-        x_enc = self.encode(x)
-        latent_mu = self.latent_mu(x_enc).view(x.size(0), 1, -1).repeat(1, self.num_samples, 1)
-        latent_logsigma = self.latent_logsigma(x_enc).view(x.size(0), 1, -1).repeat(1, self.num_samples, 1)
-        z = self.gaussian_sampler(latent_mu, latent_logsigma)
-
-        x_hat = self.decode(z)
-
-        reconstruction_mu = self.reconstruction_mu(x_hat)
-        reconstruction_logsigma = self.reconstruction_logsigma(x_hat)
-
-        return reconstruction_mu, reconstruction_logsigma, latent_mu, latent_logsigma
+            return x_h, latent_mu, latent_logsigma, z
 
 
 class BaseAttention(nn.Module):
@@ -195,7 +140,7 @@ class DRAW(nn.Module):
         kl = 0
 
         for _ in range(self.T):
-            x_hat = x - F.sigmoid(canvas)
+            x_hat = x - torch.sigmoid(canvas)
             att = self.attention.read(x, x_hat, h_dec)
 
             # Infer posterior density from hidden state
@@ -219,7 +164,7 @@ class DRAW(nn.Module):
 
         # Return the reconstruction
         x_mu = self.observation(canvas)
-        return [x_mu, kl]
+        return x_mu, kl
 
     def sample(self, z=None):
         """
@@ -275,14 +220,14 @@ class Conv2dLSTMCell(nn.Module):
         """
         (hidden, cell) = states
 
-        forget_gate = F.sigmoid(self.forget(input))
-        input_gate = F.sigmoid(self.input(input))
-        output_gate = F.sigmoid(self.output(input))
-        state_gate = F.tanh(self.state(input))
+        forget_gate = torch.sigmoid(self.forget(input))
+        input_gate = torch.sigmoid(self.input(input))
+        output_gate = torch.sigmoid(self.output(input))
+        state_gate = torch.tanh(self.state(input))
 
         # Update internal cell state
         cell = forget_gate * cell + input_gate * state_gate
-        hidden = output_gate * F.tanh(cell)
+        hidden = output_gate * torch.tanh(cell)
 
         return hidden, cell
 
