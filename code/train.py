@@ -70,7 +70,7 @@ class Train_Geco:
                     else:
                         constrain_ma = self.alpha * constrain_ma.detach_() + (1 - self.alpha) * constraint
                     if iter_num % self.lbd_step == 0 and epoch > self.pretrain:
-                        lambd *= torch.clamp(torch.exp(constrain_ma), 0.9, 1.1)
+                        lambd *= torch.clamp(torch.exp(constrain_ma), 0.95, 1.05)
 
                 train_hist['loss'][-1] += loss.data.cpu().numpy()[0] / len(self.train_loader)
                 train_hist['reconstr'][-1] += constraint.data.cpu().numpy() / len(self.train_loader)
@@ -182,7 +182,7 @@ class Train_Beta:
 
                 train_hist['loss'][-1] += loss.data.cpu().numpy()[0] / len(self.train_loader)
                 train_hist['reconstr'][-1] += constraint.data.cpu().numpy() / len(self.train_loader)
-
+                test_hist['KL'][-1] += kl_div.data.cpu().numpy() / len(self.test_loader)
             self.model.train(False)
             test_hist['loss'].append(0)
             test_hist['reconstr'].append(0)
