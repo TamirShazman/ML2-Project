@@ -1,62 +1,35 @@
 \chapter*{Relationship of $\beta$-VAE to Other Fields}
 $\beta$-VAEs use a weighted optimization function allowing for customizable trade-off between the reconstruction error and the KL term.\\
-In this part of the paper, the authors present $\beta$-VAEs in the terminology of statistical mechanics in order to discuss the convergence of decoders.\\
+In this part of the paper, the authors present $\beta$-VAEs in the terminology of Statistical Mechanics in order to discuss the convergence of decoders.\\
 They model the statistical mechanics problem in the following way:
 \begin{description}
   \item[$\bullet$ order parameter $u(\beta)$] = $\E\left[\norm{x - g(z)}^2\right]$
   \item[$\bullet$ critical temperature points] $\beta_c$
-  \item[$\bullet$ phase transitions] are detected by areas of high-curvature (see picture below)
+  \item[$\bullet$ phase transitions] are detected by areas of high-curvature, i.e. a large second derivative ($\frac{\partial^2 u(\beta)}{\partial^2 \beta}$)
 \end{description}
-In this part of the paper, the represent the latent space using an orthogonal basis $\phi$ and denote $\phi_a:\mathcal{R}^{d_z}\to\{0,1\}$.
-
-\section*{Stationary Point for Langrangian of ELBO}
-Before we can show, the relationship of $\beta$-VAEs we must develop the stationary points as we did for the ELBO function.
+This re-framing of the problem allows $\beta$-VAEs to be compared to kernel-PCA used with normalized Gaussian kernels. These kernels are used for dimension reduction and their reconstructions are equivalent to the fixed-point equations that maximize the ELBO for the $\beta$-VAE decoder.\\
+We will show this result:\\
+The decoder $g(z)$ can be presented as $\sum_i\frac{q(z|x_i)x_i}{\sum_j{q(z|x_j)}}$.\\
+In this part of the paper, we represent the latent space using an orthogonal basis $\phi_a$ and denote $\phi_a:\mathcal{R}^{d_z}\to\{0,1\}$.) \\
+We denote the set of weights that maintain the equivalence to the original basis as $m_{i,a}$ s.t. $i$ relates to an index relative to the sum and $a$ refers to the new basis.\\
+If we label $g(z) = \psi^T\phi(z)$ to be an equivalent representation of the decoder under the new basis $\phi$, then we can reformulate the fixed-points in the following way:
 \begin{gather*}
-L_{\lambda} = \E_{\rho(x)}\left[KL[q(z|x) \| \pi(z)] + \lambda^{T}\E_{q(z|x)}[\mathcal{C}(x, g(z))\right]
+q_i^{t+1} = \pi(z)\sum_b\frac{e^\frac{-\norm{x_i - \psi_b^t}^2}{2\beta}}{\sum_b \pi_be^\frac{-\norm{x_i-\psi_b^t}^2}{2\beta}}
 \end{gather*}
-We will now find the partial derivatives of the GECO function by a decoder, $g(z)$, and an encoder, $q(z|x)$.\\
-\subsection*{Decoder}
+In order to simplify the following equation, let us define $m_{i,b}$ relative to basis $\phi(b)$:
 \begin{gather*}
-\frac{\partial}{\partial g(z)}\E_{\rho(x)}\left[KL[q(z|x) \| \pi(z)] + \lambda^{T}\E_{q(z|x)}[\mathcal{C}(x, g(z))\right] = \lambda^{T}\E_{\rho(x)}[q(z|x)\frac{\partial \mathcal{C}(x, g(z))}{\partial g(z)}
+m_{i,b}^t = \sum_b\frac{e^\frac{-\norm{x_i - \psi_b^t}^2}{2\beta}}{\sum_b \pi_be^\frac{-\norm{x_i-\psi_b^t}^2}{2\beta}}
 \end{gather*}
-Setting the partial derivative to zero and writing the expectation explicitly
+If so, then by the fixed-point equation mentioned above for $g(z)$, it must be that:
 \begin{gather*}
-0 = \frac{\lambda^{T}}{n}\sum_{x}q(z|x)\frac{\partial \mathcal{C}(x, g(z))}{\partial g(z)}
+\psi_b^{t+1} = \sum_i \frac{m_{i,b} x_i}{\sum_j m_{j,b}}
 \end{gather*}
-The solution of which depends on the reconstruction constraint used.\par
-\subsection*{Encoder}
-\setcounter{equation}{0}
-\begin{equation}
-\frac{\partial}{\partial q(z|x)}\E_{\rho(x)}\left[KL[q(z|x) \| \pi(z)] + \lambda^{T}\E_{q(z|x)}[\mathcal{C}(x, g(z))\right]
-\end{equation}
-\begin{equation}
-\frac{\partial}{\partial q(z|x)} \frac{1}{n}\sum_{x}\sum_{z} q(z|x)\ln{\frac{q(z|x)}{\pi(z)}} + q(z|x)\lambda^{T}\mathcal{C}(x, g(z))
-\end{equation}
-\begin{equation}
-\frac{1}{n}[1 + \ln{\frac{q(z|x)}{\pi(z)}} + \lambda^{T}\mathcal{C}(x, g(z))]
-\end{equation}
-The paper only shows a proportional relationship, ignoring the constants. The simplified equation is:
-\begin{equation}
-\ln{\frac{q(z|x)}{\pi(z)}} + \lambda^{T}\mathcal{C}(x, g(z))
-\end{equation}
-After setting the partial derivative to zero, we derive:
-\begin{gather*}
-q(z|x) \propto \pi(z)e^{-\lambda^{T}\mathcal{C}(x, g(z)}
-\end{gather*}
-
-\section*{Equipartition of energy in $\beta$-VAEs}
-Using the reconstruction error, $\mathcal{C}(x, g(z)$ as the Hamiltonian function $H(x,z)$, let us define the following. $\Omega(x,z_0)$ is the set of points in the latent space where the Hamiltonian is approximately constant. That is to say $\Omega(x,z_0) = \{z'||H(x,z')-H(x,z_0)|\leq\epsilon\}$. We define $\Omega_a$ as the set $\{\Omega(x,z_0),\forall x$ and $z_0\}$.\\
-Using this definition if we hold $x$ constant, the function $H(x,z)$ only has $|z|=m$ possible distinct values, which we will enumerate as $H_ia$ relative to $\Omega_a$.
-Additionally, we define the probability of a sample from the prior being in 
-Above we saw above,
-\begin{gather*}
-q(z|x) \propto \pi(z)e^{-\lambda^{T}\mathcal{C}(x, g(z)}
-\end{gather*}
-Therefore, after dividing by the necessary constant
-\begin{gather*}
-q_i(z) = \pi(z)\sum_a\frac{e^{H_ia}{\beta}}{\sum_b e^{H_ib}{\beta}}\mathcal{I}_{z\in\Omega_a}
-\end{gather*}
+Let us note that $m_{i,b}$ is the same term used in a normalized Gaussian kernel. Thereby, showing the equivalency claimed by the author between the decoder's fixed point and the reconstructions of a kernel-PCA model using a normalized Gaussian Kernel (with scale parameter $\sqrt[]{\beta}$).
 
 
+\section*{Equipartition of energy for $\beta$-VAEs}
 
-
+For $\beta$-VAEs, we proved in the previous section that the reconstruction vectors $\psi_b$ converge to fixed-points.\\
+Therefore, presenting the problem in terms of Statistical Mechanics, we define the reconstruction error, $\mathcal{C}(x, g(z))$, as the Hamiltonian function $H(x,z)$. The Hamiltonian function is used to measure the total energy of a thermodynamic system. Because the reconstruction vectors converge to fixed-points, there are areas within the latent space where the Hamiltonian is approximately constant.\\
+Let us define the following: $\Omega(x,z_0)$ is the set of points in the latent space where the Hamiltonian is approximately constant. That is to say $\Omega(x,z_0) = \{z'||H(x,z')-H(x,z_0)|\leq\epsilon\}$. We define $\Omega_a$ as the set $\{\Omega(x,z_0),\forall x$ and $z_0\}$.\\
+Based on these observations, the authors suggest viewing the tiling of the latent space the creation of different levels of the Hamiltonian function. We proved earlier that when using ELBO as the optimization function, the latent space is divided into an equiprobable partition under the prior. Therefore, these levels are equiprobable and this is similar to the \textit{equipartition of energy theorem}. They believe that this view will lead to the development of more meaningful constraints for VAE models.

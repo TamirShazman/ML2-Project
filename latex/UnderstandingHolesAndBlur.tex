@@ -27,10 +27,10 @@ $p(x|z) = \mathcal{N}(g(z), \sigma^2)$
 
 \begin{gather*}
 {ELBO} =  \E_{\rho(x)}\left[[\E_{q(z|x)}[\ln{p(x|z)}] - KL[q(z|x) \| \pi(z)]\right]
-= \sum_{x}\rho(x)\left(\sum_{z} q(z|x) \ln{p(x|z)} - \sum_{z} ln \frac{q(z|x)}{\pi(z)}\right)
+\approx \sum_{x}\rho(x)\left(\sum_{z} q(z|x) \ln{p(x|z)} - \sum_{z} ln \frac{q(z|x)}{\pi(z)}\right)
 \end{gather*}
 
-By the definition of Dirac measure, $\rho(x) = \frac{1}{n}, \forall x$
+By the definition of Dirac measure, $\forall x,$  $\rho(x) = \frac{\mathcal{I}_{(x=x_i)}}{n}$
 Therefore, we receive the following:
 \begin{gather*}
 \frac{1}{n}\sum_{x}\sum_{z} q(z|x) \ln{p(x|z)} - \sum_{z} ln \frac{q(z|x)}{\pi(z)}
