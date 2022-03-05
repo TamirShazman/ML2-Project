@@ -1,362 +1,229 @@
-import numpy as np
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-import torch.utils.data as data_utils
 import torch
-import matplotlib.pyplot as plt
-from torch.optim.lr_scheduler import ReduceLROnPlateau
 import time
 from IPython import display
+from functions import kl_divergence, log_likelihood, reconstruction_error, RE_mtr, loss_beta_vae, draw_hist
+import models
 
 
-import argparse
-import torchvision
+class Train_Geco:
+    def __init__(self, model, optimizer, scheduler, train_loader, test_loader, init_lambda=torch.FloatTensor([1]),
+                 constraint_f=RE_mtr, num_epochs=20, lbd_step=100, alpha=0.99, verbose=True, device='cpu', tol=1,
+                 pretrain=1):
+        self.model = model
+        self.optimizer = optimizer
+        self.scheduler = scheduler
+        self.train_loader = train_loader
+        self.test_loader = test_loader
+        self.init_lambda = init_lambda
+        self.constrain_f = constraint_f
+        self.num_epochs = num_epochs
+        self.lbd_step = lbd_step
+        self.alpha = alpha
+        self.verbose = verbose
+        self.device = device
+        self.tol = tol
+        self.pretrain = pretrain
 
+    def train(self):
+        parametrized = self.model.parametrized
+        self.model.to(self.device)
+        train_hist = {'loss': [], 'reconstr': [], 'KL': []}
+        test_hist = {'loss': [], 'reconstr': [], 'KL': []}
+        lambd_hist = []
 
-def KL_divergence(mu, logsigma):
-    return - 0.5 * torch.sum(1 + 2 * logsigma - mu.pow(2) - logsigma.exp().pow(2), dim=1)
+        lambd = self.init_lambda.to(self.device)
+        iter_num = 0
 
+        for epoch in range(self.num_epochs):
+            start_time = time.time()
 
-def log_likelihood(x, mu, logsigma):
-    return torch.sum(- logsigma - 0.5 * np.log(2 * np.pi) - (mu - x).pow(2) / (2 * logsigma.exp().pow(2)), dim=1)
+            self.model.train(True)
+            train_hist['loss'].append(0)
+            train_hist['reconstr'].append(0)
+            train_hist['KL'].append(0)
 
+            for X_batch in self.train_loader:
 
-def RE(x, mu, tol):
-    return torch.sum(torch.pow(mu - x, 2), dim=1) - tol ** 2
-
-
-def RE_mtr(x, mu, tol):
-    return torch.sum(torch.pow(mu - x, 2), dim=(1, 2)) - tol ** 2
-
-
-def loss_beta_vae(x, mu_gen, logsigma_gen, mu_latent, logsigma_latent, beta=1):
-    return torch.mean(beta * KL_divergence(mu_latent, logsigma_latent) - log_likelihood(x, mu_gen, logsigma_gen))
-
-def calculate_lambda_modification(KL_diff, recon_diff):
-    '''
-    change lambda based on the last improvement made.
-    If both KL and reconstruction improved than keep lambda
-    If KL improved at the expense of reconstruction, then shift more weight to reconstruction
-    '''
-    if KL_diff >= 0 and recon_diff >= 0:
-        power = 0
-    elif KL_diff > 0 and recon_diff < 0:
-        power = -torch.div(recon_diff, KL_diff)
-    elif KL_diff < 0 and recon_diff > 0:
-        power = torch.div(KL_diff, recon_diff)
-
-    return torch.clamp(torch.exp(power), 0.9, 1.05)
-
-def draw_hist(train_hist, valid_hist, lambd_hist=[0]):
-    fig, ax = plt.subplots(ncols=4, nrows=1, figsize=(16, 4))
-
-    ax[0].plot(train_hist['loss'], label='train')
-    ax[0].plot(valid_hist['loss'], label='test')
-    ax[0].legend()
-    ax[0].set_title("Total Loss")
-
-    ax[1].plot(train_hist['reconstr'], label='train')
-    ax[1].plot(valid_hist['reconstr'], label='test')
-    ax[1].legend()
-    ax[1].set_title("Reconstruction")
-
-    ax[2].plot(train_hist['KL'], label='train')
-    ax[2].plot(valid_hist['KL'], label='test')
-    ax[2].legend()
-    ax[2].set_title("KL divergence")
-
-    ax[3].plot(lambd_hist)
-    ax[3].set_title("Lambda")
-    plt.show()
-
-
-def train_geco_draw(model, opt, scheduler, train_loader, valid_loader,
-                    lambd_init=torch.FloatTensor([1]),
-                    constraint_f=RE_mtr, num_epochs=20,
-                    lbd_step=100, alpha=0.99, visualize=True,
-                    device='cpu', tol=1, pretrain=1):
-    model.to(device)
-
-    train_hist = {'loss': [], 'reconstr': [], 'KL': []}
-    valid_hist = {'loss': [], 'reconstr': [], 'KL': []}
-    lambd_hist = []
-
-    lambd = lambd_init.to(device)
-    iter_num = 0
-
-    for epoch in range(num_epochs):
-        # a full pass over the training data:
-        start_time = time.time()
-
-        model.train(True)
-        train_hist['loss'].append(0)
-        train_hist['reconstr'].append(0)
-        train_hist['KL'].append(0)
-
-        for X_batch in train_loader:
-            X_batch = X_batch.to(device)
-
-            reconstruction_mu, KL = model(X_batch)
-            constraint = torch.mean(constraint_f(X_batch, reconstruction_mu, tol=tol))
-            KL_div = torch.mean(KL.sum(dim=(1, 2, 3)))
-            loss = KL_div + lambd * constraint
-            loss.backward()
-            opt.step()
-            opt.zero_grad()
-
-            with torch.no_grad():
-                if epoch == 0 and iter_num == 0:
-                    constrain_ma = constraint
+                if isinstance(self.model, models.ConvolutionalDRAW):
+                    X_batch = X_batch.to(self.device)
+                    x_hat, kl, _, _ = self.model(X_batch)
+                    constraint = torch.mean(self.constrain_f(X_batch, x_hat, tol=self.tol))
+                    kl_div = torch.mean(kl.sum(dim=(1, 2, 3)))
                 else:
-                    constrain_ma = alpha * constrain_ma.detach_() + (1 - alpha) * constraint
-                if iter_num % lbd_step == 0 and epoch > pretrain:
-                    lambd *= torch.clamp(torch.exp(constrain_ma), 0.9, 1.05)
+                    X_batch = X_batch.reshape(self.train_loader.batch_size, -1).to(self.device)
+                    if parametrized:
+                        reconstruction_mu, reconstruction_logsigma, latent_mu, latent_logsigma, _ = self.model(X_batch)
+                        constraint = - torch.mean(self.constrain_f(X_batch, reconstruction_mu, reconstruction_logsigma))
+                    else:
+                        x_hat, latent_mu, latent_logsigma, _ = self.model(X_batch)
+                        constraint = torch.mean(self.constrain_f(X_batch, x_hat, tol=self.tol))
+                    kl_div = torch.mean(kl_divergence(latent_mu, latent_logsigma))
 
-            train_hist['loss'][-1] += loss.data.cpu().numpy()[0] / len(train_loader)
-            train_hist['reconstr'][-1] += constraint.data.cpu().numpy() / len(train_loader)
-            train_hist['KL'][-1] += KL_div.data.cpu().numpy() / len(train_loader)
-            iter_num += 1
-        lambd_hist.append(lambd.data.cpu().numpy()[0])
+                loss = kl_div + lambd * constraint
+                loss.backward()
+                self.optimizer.step()
+                self.optimizer.zero_grad()
 
-        model.train(False)
-        valid_hist['loss'].append(0)
-        valid_hist['reconstr'].append(0)
-        valid_hist['KL'].append(0)
-        with torch.no_grad():
-            for X_batch in valid_loader:
-                X_batch = X_batch.to(device)
-                reconstruction_mu, KL = model(X_batch)
-                constraint = torch.mean(constraint_f(X_batch, reconstruction_mu, tol=tol))
-                KL_div = torch.mean(KL.sum(dim=(1, 2, 3)))
-                loss = KL_div + lambd * constraint
-
-                valid_hist['loss'][-1] += loss.data.cpu().numpy()[0] / len(valid_loader)
-                valid_hist['reconstr'][-1] += constraint.data.cpu().numpy() / len(valid_loader)
-                valid_hist['KL'][-1] += KL_div.data.cpu().numpy() / len(valid_loader)
-
-        # update lr
-        if scheduler is not None:
-            scheduler.step(valid_hist['loss'][-1])
-        # stop
-        if opt.param_groups[0]['lr'] <= 1e-6:
-            break
-
-        # visualization of training
-        if visualize:
-            display.clear_output(wait=True)
-            draw_hist(train_hist, valid_hist, lambd_hist)
-
-        print("Epoch {} of {} took {:.3f}s".format(epoch + 1, num_epochs, time.time() - start_time))
-        print("  training loss (in-iteration): \t{:.6f}".format(train_hist['loss'][-1]))
-        print("  validation loss (in-iteration): \t{:.6f}".format(valid_hist['loss'][-1]))
-
-
-def train_geco(model, opt, scheduler, train_loader, valid_loader,
-               lambd_init=torch.FloatTensor([1]),
-               KL_divergence=KL_divergence,
-               constraint_f=RE, num_epochs=20,
-               lbd_step=100, alpha=0.99, visualize=True,
-               device='cpu', tol=1, pretrain=1):
-    normal = False
-    print("Started training")
-    print(normal)
-    model.to(device)
-    train_hist = {'loss': [], 'reconstr': [], 'KL': []}
-    valid_hist = {'loss': [], 'reconstr': [], 'KL': []}
-    lambd_hist = []
-
-    lambd = lambd_init.to(device)
-    iter_num = 0
-
-    for epoch in range(num_epochs):
-        # a full pass over the training data:
-        start_time = time.time()
-
-        model.train(True)
-        train_hist['loss'].append(0)
-        train_hist['reconstr'].append(0)
-        train_hist['KL'].append(0)
-
-        previous_constraint = 0
-        previous_kl_div = 0
-
-        for X_batch in train_loader:
-            X_batch = X_batch.reshape(train_loader.batch_size, -1).to(device)
-            reconstruction_mu, reconstruction_logsigma, latent_mu, latent_logsigma = model(X_batch)
-            constraint = torch.mean(constraint_f(X_batch, reconstruction_mu, tol=tol))
-            KL_div = torch.mean(KL_divergence(latent_mu, latent_logsigma))
-            loss = KL_div + lambd * constraint
-            #             loss.backward(retain_graph = True)
-            loss.backward()
-            opt.step()
-            opt.zero_grad()
-
-            if normal:
                 with torch.no_grad():
                     if epoch == 0 and iter_num == 0:
                         constrain_ma = constraint
                     else:
-                        constrain_ma = alpha * constrain_ma.detach_() + (1 - alpha) * constraint
-                    if iter_num % lbd_step == 0 and epoch > pretrain:
-                        #                     print(torch.exp(constrain_ma), lambd)
-                        lambd *= torch.clamp(torch.exp(constrain_ma), 0.9, 1.1)
-            else:
-                with torch.no_grad():
-                    if epoch == 0 and iter_num == 0:
-                        pass
-                    elif iter_num == 1:
-                        constrain_diff_ma = constraint - previous_constraint
-                        kl_div_diff_ma = KL_div - previous_kl_div
+                        constrain_ma = self.alpha * constrain_ma.detach_() + (1 - self.alpha) * constraint
+                    if iter_num % self.lbd_step == 0 and epoch > self.pretrain:
+                        lambd *= torch.clamp(torch.exp(constrain_ma), 0.95, 1.05)
+
+                train_hist['loss'][-1] += loss.data.cpu().numpy()[0] / len(self.train_loader)
+                train_hist['reconstr'][-1] += constraint.data.cpu().numpy() / len(self.train_loader)
+                train_hist['KL'][-1] += kl_div.data.cpu().numpy() / len(self.train_loader)
+                iter_num += 1
+            lambd_hist.append(lambd.data.cpu().numpy()[0])
+
+            self.model.train(False)
+            test_hist['loss'].append(0)
+            test_hist['reconstr'].append(0)
+            test_hist['KL'].append(0)
+            with torch.no_grad():
+                for X_batch in self.test_loader:
+
+                    if isinstance(self.model, models.ConvolutionalDRAW):
+                        X_batch = X_batch.to(self.device)
+                        x_hat, kl, _, _ = self.model(X_batch)
+                        constraint = torch.mean(self.constrain_f(X_batch, x_hat, tol=self.tol))
+                        kl_div = torch.mean(kl.sum(dim=(1, 2, 3)))
                     else:
-                        constrain_diff = constraint - previous_constraint
-                        kl_div_diff = KL_div - previous_kl_div
-                        constrain_diff_ma = alpha * constrain_diff_ma.detach_() + (1 - alpha) * constrain_diff
-                        kl_div_diff_ma = alpha * kl_div_diff_ma.detach_() + (1 - alpha) * kl_div_diff
-                        if iter_num % lbd_step == 0 and epoch > pretrain:
-                            lambd *= calculate_lambda_modification(kl_div_diff_ma, constrain_diff_ma)
-                    previous_constraint = constraint
-                    previous_kl_div = KL_div
+                        X_batch = X_batch.reshape(self.train_loader.batch_size, -1).to(self.device)
+                        if parametrized:
+                            reconstruction_mu, reconstruction_logsigma, latent_mu, latent_logsigma, _ = \
+                                self.model(X_batch)
+                            constraint = - torch.mean(
+                                self.constrain_f(X_batch, reconstruction_mu, reconstruction_logsigma))
+                        else:
+                            x_hat, latent_mu, latent_logsigma, _ = self.model(X_batch)
+                            constraint = torch.mean(self.constrain_f(X_batch, x_hat, tol=self.tol))
+                        kl_div = torch.mean(kl_divergence(latent_mu, latent_logsigma))
 
-        train_hist['loss'][-1] += loss.data.cpu().numpy()[0] / len(train_loader)
-        train_hist['reconstr'][-1] += constraint.data.cpu().numpy() / len(train_loader)
-        train_hist['KL'][-1] += KL_div.data.cpu().numpy() / len(train_loader)
-        iter_num += 1
-        lambd_hist.append(lambd.data.cpu().numpy()[0])
+                    loss = kl_div + lambd * constraint
+                    test_hist['loss'][-1] += loss.data.cpu().numpy()[0] / len(self.test_loader)
+                    test_hist['reconstr'][-1] += constraint.data.cpu().numpy() / len(self.test_loader)
+                    test_hist['KL'][-1] += kl_div.data.cpu().numpy() / len(self.test_loader)
 
-        model.train(False)
-        valid_hist['loss'].append(0)
-        valid_hist['reconstr'].append(0)
-        valid_hist['KL'].append(0)
-        with torch.no_grad():
-            for X_batch in valid_loader:
-                X_batch = X_batch.reshape(train_loader.batch_size, -1).to(device)
-                reconstruction_mu, reconstruction_logsigma, latent_mu, latent_logsigma = model(X_batch)
+            # update lr
+            if self.scheduler is not None:
+                self.scheduler.step(test_hist['loss'][-1])
+            # stop
+            if self.optimizer.param_groups[0]['lr'] <= 1e-6:
+                break
 
-                constraint = torch.mean(constraint_f(X_batch, reconstruction_mu, tol=tol))
-                KL_div = torch.mean(KL_divergence(latent_mu, latent_logsigma))
-                loss = KL_div + lambd * constraint
-                valid_hist['loss'][-1] += loss.data.cpu().numpy()[0] / len(valid_loader)
-                valid_hist['reconstr'][-1] += constraint.data.cpu().numpy() / len(valid_loader)
-                valid_hist['KL'][-1] += KL_div.data.cpu().numpy() / len(valid_loader)
+            # visualization of training
+            if self.verbose:
+                display.clear_output(wait=True)
+                draw_hist(train_hist, test_hist, lambd_hist)
 
-        # update lr
-        if scheduler is not None:
-            scheduler.step(valid_hist['loss'][-1])
-        # stop
-        if opt.param_groups[0]['lr'] <= 1e-6:
-            break
+            print("Epoch {} of {} took {:.3f}s".format(epoch + 1, self.num_epochs, time.time() - start_time))
+            print("  training loss (in-iteration): \t{:.6f}".format(train_hist['loss'][-1]))
+            print("  validation loss (in-iteration): \t{:.6f}".format(test_hist['loss'][-1]))
 
-        # visualization of training
-        if visualize:
-            display.clear_output(wait=True)
-            draw_hist(train_hist, valid_hist, lambd_hist)
-
-        print("Epoch {} of {} took {:.3f}s".format(epoch + 1, num_epochs, time.time() - start_time))
-        print("  training loss (in-iteration): \t{:.6f}".format(train_hist['loss'][-1]))
-        print("  validation loss (in-iteration): \t{:.6f}".format(valid_hist['loss'][-1]))
+        return lambd_hist, train_hist, test_hist
 
 
-def train_beta(model, opt, scheduler, train_loader, valid_loader, device='cuda',
-               loss_beta_vae=loss_beta_vae, num_epochs=20, beta=1):
-    train_hist = {'loss': [], 'reconstr': [], 'KL': []}
-    valid_hist = {'loss': [], 'reconstr': [], 'KL': []}
-    model.to(device)
-    for epoch in range(num_epochs):
-        # a full pass over the training data:
-        start_time = time.time()
-        model.train(True)
-        train_hist['loss'].append(0)
-        train_hist['reconstr'].append(0)
-        train_hist['KL'].append(0)
+class Train_Beta:
+    def __init__(self, model, optimizer, scheduler, train_loader, test_loader, constraint_f=log_likelihood,
+                 num_epochs=20, beta=torch.FloatTensor([1]), verbose=True, device='cpu', tol=1):
+        self.model = model
+        self.optimizer = optimizer
+        self.scheduler = scheduler
+        self.train_loader = train_loader
+        self.test_loader = test_loader
+        self.constraint_f = constraint_f
+        self.num_epochs = num_epochs
+        self.beta = beta
+        self.verbose = verbose
+        self.device = device
+        self.tol = tol
 
-        for X_batch in train_loader:
-            X_batch = X_batch.reshape(train_loader.batch_size, -1).to(device)
-            reconstruction_mu, reconstruction_logsigma, latent_mu, latent_logsigma = model.forward(X_batch)
-            loss = loss_beta_vae(X_batch, reconstruction_mu, reconstruction_logsigma, latent_mu, latent_logsigma, beta)
-            loss.backward()
-            opt.step()
-            opt.zero_grad()
-            train_hist['loss'][-1] += loss.data.cpu().numpy() / len(train_loader)
+    def train(self):
+        parametrized = self.model.parametrized
+        self.model.to(self.device)
+        train_hist = {'loss': [], 'reconstr': [], 'KL': []}
+        test_hist = {'loss': [], 'reconstr': [], 'KL': []}
 
-        # a full pass over the validation data:
-        model.train(False)
-        valid_hist['loss'].append(0)
-        valid_hist['reconstr'].append(0)
-        valid_hist['KL'].append(0)
-        with torch.no_grad():
-            for X_batch in valid_loader:
-                X_batch = X_batch.reshape(valid_loader.batch_size, -1).to(device)
+        beta = self.beta.to(self.device)
+        for epoch in range(self.num_epochs):
+            start_time = time.time()
 
-                reconstruction_mu, reconstruction_logsigma, latent_mu, latent_logsigma = model.forward(X_batch)
-                loss = loss_beta_vae(X_batch, reconstruction_mu, reconstruction_logsigma, latent_mu, latent_logsigma,
-                                     beta)
-                valid_hist['loss'][-1] += loss.data.cpu().numpy() / len(valid_loader)
+            self.model.train(True)
+            train_hist['loss'].append(0)
+            train_hist['reconstr'].append(0)
+            train_hist['KL'].append(0)
 
-        # update lr
-        if scheduler is not None:
-            scheduler.step(valid_hist['loss'][-1])
-        # stop
-        if opt.param_groups[0]['lr'] <= 1e-6:
-            break
+            for X_batch in self.train_loader:
 
-        # visualization of training
-        display.clear_output(wait=True)
-        draw_hist(train_hist, valid_hist)
+                if isinstance(self.model, models.ConvolutionalDRAW):
+                    X_batch = X_batch.to(self.device)
+                    x_hat, kl, latent_mu, q_std = self.model(X_batch)
+                    latent_logsigma = torch.pow(q_std, 2)
+                    kl_div = torch.mean(kl.sum(dim=(1, 2, 3)))
+                else:
+                    X_batch = X_batch.reshape(self.train_loader.batch_size, -1).to(self.device)
+                    if parametrized:
+                        reconstruction_mu, reconstruction_logsigma, latent_mu, latent_logsigma, _ = \
+                            self.model(X_batch)
+                        constraint = - torch.mean(
+                            self.constraint_f(X_batch, reconstruction_mu, reconstruction_logsigma))
+                    else:
+                        x_hat, latent_mu, latent_logsigma, _ = self.model(X_batch)
+                        constraint = torch.mean(self.constraint_f(X_batch, x_hat, tol=self.tol))
+                    kl_div = torch.mean(kl_divergence(latent_mu, latent_logsigma))
+                loss = kl_div * beta + constraint
 
-        print("Epoch {} of {} took {:.3f}s".format(epoch + 1, num_epochs, time.time() - start_time))
-        print("  training loss (in-iteration): \t{:.6f}".format(train_hist['loss'][-1]))
-        print("  validation loss (in-iteration): \t{:.6f}".format(valid_hist['loss'][-1]))
+                loss.backward()
+                self.optimizer.step()
+                self.optimizer.zero_grad()
 
+                train_hist['loss'][-1] += loss.data.cpu().numpy()[0] / len(self.train_loader)
+                train_hist['reconstr'][-1] += constraint.data.cpu().numpy() / len(self.train_loader)
+                test_hist['KL'][-1] += kl_div.data.cpu().numpy() / len(self.test_loader)
+            self.model.train(False)
+            test_hist['loss'].append(0)
+            test_hist['reconstr'].append(0)
+            test_hist['KL'].append(0)
+            with torch.no_grad():
+                for X_batch in self.test_loader:
 
-def train_beta_draw(model, opt, scheduler, train_loader, valid_loader, device='cuda', num_epochs=20, beta=1):
-    train_hist = {'loss': [], 'reconstr': [], 'KL': []}
-    valid_hist = {'loss': [], 'reconstr': [], 'KL': []}
+                    if isinstance(self.model, models.ConvolutionalDRAW):
+                        X_batch = X_batch.to(self.device)
+                        x_hat, kl = self.model(X_batch)
+                        kl_div = torch.mean(kl.sum(dim=(1, 2, 3)))
+                    else:
+                        X_batch = X_batch.reshape(self.train_loader.batch_size, -1).to(self.device)
+                        if parametrized:
+                            reconstruction_mu, reconstruction_logsigma, latent_mu, latent_logsigma, _ = \
+                                self.model(X_batch)
+                            constraint = - torch.mean(
+                                self.constraint_f(X_batch, reconstruction_mu, reconstruction_logsigma))
+                        else:
+                            x_hat, latent_mu, latent_logsigma, _ = self.model(X_batch)
+                            constraint = torch.mean(self.constraint_f(X_batch, x_hat, tol=self.tol))
+                        kl_div = torch.mean(kl_divergence(latent_mu, latent_logsigma))
+                        loss = kl_div * beta + constraint
+                    test_hist['loss'][-1] += loss.data.cpu().numpy()[0] / len(self.test_loader)
+                    test_hist['reconstr'][-1] += constraint.data.cpu().numpy() / len(self.test_loader)
+                    test_hist['KL'][-1] += kl_div.data.cpu().numpy() / len(self.test_loader)
 
-    model.to(device)
-    for epoch in range(num_epochs):
-        # a full pass over the training data:
-        start_time = time.time()
-        train_hist['loss'].append(0)
-        train_hist['reconstr'].append(0)
-        train_hist['KL'].append(0)
-        model.train(True)
-        for X_batch in train_loader:
-            X_batch = X_batch.to(device)
-            reconstruction_mu, KL = model(X_batch)
-            KL = torch.mean(KL.sum(dim=(1, 2, 3)))
-            reconstr = torch.mean(RE_mtr(reconstruction_mu, X_batch, 0))
-            loss = reconstr + beta * KL
-            loss.backward()
-            opt.step()
-            opt.zero_grad()
-            train_hist['loss'][-1] += loss.data.cpu().numpy() / len(train_loader)
+            # update lr
+            if self.scheduler is not None:
+                self.scheduler.step(test_hist['loss'][-1])
+            # stop
+            if self.optimizer.param_groups[0]['lr'] <= 1e-6:
+                break
 
-        # a full pass over the validation data:
-        model.train(False)
-        valid_hist['loss'].append(0)
-        valid_hist['reconstr'].append(0)
-        valid_hist['KL'].append(0)
-        with torch.no_grad():
-            for X_batch in train_loader:
-                X_batch = X_batch.to(device)
-                reconstruction_mu, KL = model(X_batch)
-                KL = torch.mean(KL.sum(dim=(1, 2, 3)))
-                reconstr = torch.mean(RE_mtr(X_batch, reconstruction_mu, 0))
-                loss = reconstr + beta * KL
-                valid_hist['loss'][-1] += loss.data.cpu().numpy() / len(valid_loader)
+            # visualization of training
+            if self.verbose:
+                display.clear_output(wait=True)
+                draw_hist(train_hist, test_hist)
 
-        # update lr
-        if scheduler is not None:
-            scheduler.step(valid_hist['loss'][-1])
-        # stop
-        if opt.param_groups[0]['lr'] <= 1e-6:
-            break
+            print("Epoch {} of {} took {:.3f}s".format(epoch + 1, self.num_epochs, time.time() - start_time))
+            print("  training loss (in-iteration): \t{:.6f}".format(train_hist['loss'][-1]))
+            print("  validation loss (in-iteration): \t{:.6f}".format(test_hist['loss'][-1]))
 
-        # visualization of training
-        display.clear_output(wait=True)
-        draw_hist(train_hist, valid_hist)
-
-        print("Epoch {} of {} took {:.3f}s".format(epoch + 1, num_epochs, time.time() - start_time))
-        print("  training loss (in-iteration): \t{:.6f}".format(train_hist['loss'][-1]))
-        print("  validation loss (in-iteration): \t{:.6f}".format(valid_hist['loss'][-1]))
+        return train_hist, test_hist
