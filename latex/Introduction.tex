@@ -28,10 +28,10 @@ KL(q(z)||p(z|X))=\mathbb{E}_{z \sim q(z)}[log \ q(z)-log \ p(z|X)] = \\
 \end{gather*}
 According to (1), if we want to maximize the log-likelihood we need to maximize : \\ \\
 $log \ p(X) = \underbrace{\mathbb{E}_{z \sim q(z)}[-log \ q(z) + log \ p(z) + log \ p(X|z)]}_{ELBO}+KL(q(z)||p(z|X))$ \\ \\
-The Evidence lower bound (ELBO) appropriately lower bounds the above term because KL is lways positive. Thereby, the following inequality: \\ \\
+The Evidence lower bound (ELBO) approximately lower bounds the above term because KL is always positive. Thereby, the following inequality: \\ \\
 $log \ p(X) = \underbrace{\mathbb{E}_{z \sim q(z)}[-log \ q(z) + log \ p(z) + log \ p(X|z)]}_{ELBO}+KL(q(z)||p(z|X)) \underbrace{\geq}_{KL \geq 0} ELBO $ \\
 \section*{ELBO Maximization}
-We maximize ELBO and not ($\mathbb{E}_{z \sim q_{\Phi}(z)}[-log \ q_{\Phi}(z) + log \ p(z) + log \ p_{\theta}(X|z)]+KL(q_{\Phi}(z)||p(z|X))$) because we do not know the marginal posterior??.TAMIRRRRR. However, we can see that given X, the log-likelihood is not dependent on $q_{\Phi}(z)$ and because ELBO lower bounds the above term, maximizing ELBO is equivalent to minimizing the KL-term. TAMMIR??.\\
+We maximize ELBO and not ($\mathbb{E}_{z \sim q_{\Phi}(z)}[-log \ q_{\Phi}(z) + log \ p(z) + log \ p_{\theta}(X|z)]+KL(q_{\Phi}(z)||p(z|X))$) because we do not know the posterior. However, we can see that given X, the log-likelihood is not dependent on $q_{\Phi}(z)$ and because ELBO lower bounds the above term, maximizing ELBO is equivalent to minimizing the KL-term.\\
 Therefore, our final optimization problem is: 
 \begin{gather*}
 \underset{\theta, \Phi}{\arg\max} \mathbb{E}_{z \sim q_{\Phi}(z)}[-log \ q_{\Phi}(z) + log \ p(z) + log \ p_{\theta}(X|z)] \approx \underset{\theta, \Phi}{\arg\max} \sum_{i=1}^{n}log \sum_{k=1}^{K}\frac{p_{\theta}(X^{(i)}|z_{k}^{(i)})}{q_{\Phi}(z_{k}^{(i)})}p_{Z}(z_{k}^{(i)})\\
@@ -42,7 +42,8 @@ When trying to solve the ELBO Maximization problem, we first need to choose a fa
 \underset{\theta, \Phi}{\arg\max} \ \mathbb{E}_{X\sim data}[\mathbb{E}_{z \sim q_{\Phi}(z)}[-log \ q_{\Phi}(z) + log \ p(z) + log \ p_{\theta}(X|z)]] \approx \\
 \approx \underset{\theta, \Phi}{\arg\max} \frac{1}{n}\sum_{i=1}^{n}log \sum_{k=1}^{K}\frac{p_{\theta}(X^{(i)}|z_{k}^{(i)})}{q_{\Phi}(z_{k}^{(i)})}p_{Z}(z_{k}^{(i)})
 \end{gather*}
-This can be a hard problem to solve,and every group of $X$ requires a solution. This is unfeasible and prevents generalization. Instead of optimizing a set of free parameters (for each x), we optimized a parameterized function that maps from the observation space, $X$, to [the parameters of]TAMMIR the approximate posterior distribution This is known as amortized inference. \\
+This can be a hard problem to solve,and every group of $X$ requires a solution. This is unfeasible and prevents generalization. Instead of optimizing a set of free parameters for each x, we optimized a parameterized function that maps from the observation space, $X$, to the parameters of the approximate posterior distribution.\\
+This is known as amortized inference. \\
 In practice, we use neural networks that receive observations as input, and outputs the mean and variance parameters for the latent variable associated with that observation. We can then optimize the parameters of this neural network instead of the individual parameters of each observation, allowing for generalization.
 \begin{figure}[t]
 \includegraphics[width=\textwidth]{autoencoder-architecture}
