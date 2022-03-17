@@ -1,6 +1,6 @@
 \chapter*{Understanding Holes and Blurred Reconstructions}
 The authors show that the optimal decoder, g(z), is a convex linear combination of the training data weighted by the encoders, $q(z|x)$.
-As a result, when $q(z|x)\approx 0$ there is a "hole" in the decoder and that blurring occurs when there is overlap between the supports of multiple x's $q(z|x)$.\\
+As a result, when $q(z|x)\approx 0$ there is a "hole" in the decoder and that blurring occurs when there is overlap between the supports of multiple $x$'s decoders, $q(z|x)$.\\
 In order to do so, they use the stationary points of ELBO.
 
 \section*{Stationary Points Using ELBO}
@@ -88,7 +88,7 @@ They show there results by replacing $q(z|x_{i})$ with $\frac{\pi(z)\mathcal{I}(
 Therefore,
 \setcounter{equation}{0} 
 \begin{equation}
-g(z) = \sum_{i}x_{i}\frac{q(z|x_{i}}{\sum_{j}q(z|x_{j})}
+g(z) = \sum_{i}x_{i}\frac{q(z|x_{i})}{\sum_{j}q(z|x_{j})}
 \end{equation}
 Because $\pi(z)$ appears in the numerator and denominator it is canceled out and we get
 \begin{equation}
@@ -101,4 +101,4 @@ As we can see, when z is uniquely found within the support of a specific $x_i$ t
 However, if z is found in the support of multiple x then g(z) is a weighted average of these x's, resulting in blurred reconstructions.
 
 \section*{Conclusion}
-In conclusion, the authors use the stationary point $g(z) = \frac{\sum_{x}{q(z|x) x}}{\sum_{x}{q(z|x)}}$ in order to show that "holes" occur when $q(z|x) \approx 0$. They also show that the decoder $g(z)$ is a linear combination of $q(z|x)$. Therefore, when a z is part of the "domain"/support of multiple $q(z|x)$, it is reconstructed as a blurry, weighted average of those x.
+In conclusion, the authors use the stationary point $g(z) = \frac{\sum_{x}{q(z|x) x}}{\sum_{x}{q(z|x)}}$ in order to show that "holes" occur when $q(z|x) \approx 0$. They also show that the decoder $g(z)$ is a linear combination of $q(z|x)$. Therefore, when a z is part of the support of multiple $q(z|x)$, it is reconstructed as a blurry, weighted average of the respective x.

@@ -24,7 +24,7 @@ If so, then by the fixed-point equation mentioned above for $g(z)$, it must be t
 \begin{gather*}
 \psi_b^{t+1} = \sum_i \frac{m_{i,b} x_i}{\sum_j m_{j,b}}
 \end{gather*}
-Let us note that $m_{i,b}$ is the same term used in a normalized Gaussian kernel. Thereby, showing the equivalency claimed by the author between the decoder's fixed point and the reconstructions of a kernel-PCA model using a normalized Gaussian Kernel (with scale parameter $\sqrt[]{\beta}$).
+Let us note that $m_{i,b}$ is the same term used in a normalized Gaussian kernel. Thereby, showing the equivalency claimed by the author between the decoder's fixed point and the reconstructions of a kernel-PCA model using a normalized Gaussian Kernel with standard deviation $\sqrt[]{\beta}$.
 
 
 \section*{Equipartition of energy for $\beta$-VAEs}
@@ -32,4 +32,4 @@ Let us note that $m_{i,b}$ is the same term used in a normalized Gaussian kernel
 For $\beta$-VAEs, we proved in the previous section that the reconstruction vectors $\psi_b$ converge to fixed-points.\\
 Therefore, presenting the problem in terms of Statistical Mechanics, we define the reconstruction error, $\mathcal{C}(x, g(z))$, as the Hamiltonian function $H(x,z)$. The Hamiltonian function is used to measure the total energy of a thermodynamic system. Because the reconstruction vectors converge to fixed-points, there are areas within the latent space where the Hamiltonian is approximately constant.\\
 Let us define the following: $\Omega(x,z_0)$ is the set of points in the latent space where the Hamiltonian is approximately constant. That is to say $\Omega(x,z_0) = \{z'||H(x,z')-H(x,z_0)|\leq\epsilon\}$. We define $\Omega_a$ as the set $\{\Omega(x,z_0),\forall x$ and $z_0\}$.\\
-Based on these observations, the authors suggest viewing the tiling of the latent space the creation of different levels of the Hamiltonian function. We proved earlier that when using ELBO as the optimization function, the latent space is divided into an equiprobable partition under the prior. Therefore, these levels are equiprobable and this is similar to the \textit{equipartition of energy theorem}. They believe that this view will lead to the development of more meaningful constraints for VAE models.
+Based on these observations, the authors suggest viewing the tiling of the latent space as the creation of different levels of the Hamiltonian function. We proved earlier that when using ELBO as the optimization function, the latent space is divided into an equiprobable partition under the prior. Therefore, these levels are equiprobable and this is similar to the \textit{equipartition of energy theorem}. They believe that this view will lead to the development of more meaningful constraints for VAE models.
